@@ -1,0 +1,6 @@
+node_modules/
+server/node_modules/
+client/node_modules/
+study.db
+.DS_Store
+.vscode/
