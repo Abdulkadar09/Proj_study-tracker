@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
+const asyncHandler = require('../middleware/asyncHandler');
 
-router.get('/', (req, res) => {
-  const rows = db.prepare(`
+router.get('/', asyncHandler(async (req, res) => {
+  const { rows } = await db.query(`
     SELECT s.id,
            s.subject_id,
            sub.name AS subject_name,
@@ -13,18 +14,18 @@ router.get('/', (req, res) => {
            s.duration_seconds
     FROM sessions s
     JOIN subjects sub ON sub.id = s.subject_id
+    WHERE sub.user_id = $1
     ORDER BY s.started_at DESC
-  `).all();
+  `, [req.user.id]);
   res.json(rows);
-});
+}));
 
-router.post('/', (req, res) => {
-  const { subject_id, started_at, ended_at, duration_seconds } = req.body;
+router.post('/', asyncHandler(async (req, res) => {
   const payload = {
-    subject_id: Number(subject_id),
-    started_at: Number(started_at),
-    ended_at: Number(ended_at),
-    duration_seconds: Number(duration_seconds)
+    subject_id: Number(req.body.subject_id),
+    started_at: Number(req.body.started_at),
+    ended_at: Number(req.body.ended_at),
+    duration_seconds: Number(req.body.duration_seconds)
   };
 
   if (
@@ -39,66 +40,72 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'Invalid session fields' });
   }
 
-  const subject = db.prepare('SELECT id, name FROM subjects WHERE id = ?').get(payload.subject_id);
-  if (!subject) {
-    const subjectsSummary = db.prepare('SELECT COUNT(*) AS count, GROUP_CONCAT(id) AS ids FROM subjects').get();
-    console.warn('Session rejected because subject_id was not found', {
+  const subjectResult = await db.query(
+    'SELECT id, name FROM subjects WHERE id = $1 AND user_id = $2',
+    [payload.subject_id, req.user.id]
+  );
+  if (!subjectResult.rows[0]) {
+    console.warn('Session rejected because subject_id was not found for user', {
       requested_subject_id: payload.subject_id,
-      subjects_count: subjectsSummary.count,
-      subject_ids: subjectsSummary.ids
+      user_id: req.user.id
     });
     return res.status(404).json({ error: 'Subject not found for session' });
   }
 
-  try {
-    const stmt = db.prepare(
-      'INSERT INTO sessions (subject_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?)'
-    );
-    const info = stmt.run(
-      payload.subject_id,
-      payload.started_at,
-      payload.ended_at,
-      payload.duration_seconds
-    );
-    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(info.lastInsertRowid);
-    res.status(201).json(session);
-  } catch (error) {
-    console.error('Failed to create session', { payload, error });
-    res.status(500).json({ error: 'Could not create session' });
-  }
-});
+  const { rows } = await db.query(
+    `INSERT INTO sessions (subject_id, started_at, ended_at, duration_seconds)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, subject_id, started_at, ended_at, duration_seconds`,
+    [payload.subject_id, payload.started_at, payload.ended_at, payload.duration_seconds]
+  );
+  res.status(201).json(rows[0]);
+}));
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', asyncHandler(async (req, res) => {
   const sessionId = Number(req.params.id);
-  const { duration_seconds } = req.body;
-  if (!sessionId || duration_seconds == null || typeof duration_seconds !== 'number') {
+  const durationSeconds = Number(req.body.duration_seconds);
+  if (!sessionId || !Number.isFinite(durationSeconds) || durationSeconds < 0) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
-  const session = db.prepare('SELECT started_at FROM sessions WHERE id = ?').get(sessionId);
+  const sessionResult = await db.query(`
+    SELECT s.started_at
+    FROM sessions s
+    JOIN subjects sub ON sub.id = s.subject_id
+    WHERE s.id = $1 AND sub.user_id = $2
+  `, [sessionId, req.user.id]);
+
+  const session = sessionResult.rows[0];
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
 
-  const endedAt = session.started_at + duration_seconds * 1000;
-  const stmt = db.prepare('UPDATE sessions SET duration_seconds = ?, ended_at = ? WHERE id = ?');
-  const info = stmt.run(duration_seconds, endedAt, sessionId);
-  if (!info.changes) {
-    return res.status(404).json({ error: 'Session not found' });
-  }
+  const endedAt = Number(session.started_at) + durationSeconds * 1000;
+  const { rows } = await db.query(`
+    UPDATE sessions
+    SET duration_seconds = $1, ended_at = $2
+    WHERE id = $3
+    RETURNING id, subject_id, started_at, ended_at, duration_seconds
+  `, [durationSeconds, endedAt, sessionId]);
 
-  const updated = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId);
-  res.json(updated);
-});
+  res.json(rows[0]);
+}));
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', asyncHandler(async (req, res) => {
   const sessionId = Number(req.params.id);
   if (!sessionId) {
     return res.status(400).json({ error: 'Invalid session id' });
   }
-  const stmt = db.prepare('DELETE FROM sessions WHERE id = ?');
-  const info = stmt.run(sessionId);
-  res.json({ deleted: info.changes > 0 });
-});
+
+  const { rowCount } = await db.query(`
+    DELETE FROM sessions s
+    USING subjects sub
+    WHERE s.subject_id = sub.id
+      AND s.id = $1
+      AND sub.user_id = $2
+  `, [sessionId, req.user.id]);
+
+  res.json({ deleted: rowCount > 0 });
+}));
 
 module.exports = router;

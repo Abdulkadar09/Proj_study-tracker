@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Home, History, BarChart2, BookOpen, Sun, Moon } from 'lucide-react';
+import { Home, History, BarChart2, BookOpen, Sun, Moon, LogOut } from 'lucide-react';
 import {
+  setApiAccessToken,
   fetchSubjects,
   createSubject,
   deleteSubject,
@@ -18,6 +19,8 @@ import TimerScreen from './screens/TimerScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import StatsScreen from './screens/StatsScreen';
 import SubjectsScreen from './screens/SubjectsScreen';
+import AuthScreen from './screens/AuthScreen';
+import { supabase, hasSupabaseConfig } from './supabaseClient';
 
 const STORAGE_KEY = 'study-tracker-active-session';
 const NAV_ITEMS = [
@@ -41,6 +44,8 @@ function App() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [authSession, setAuthSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const notificationTimeoutRef = useRef(null);
   const swRegistrationRef = useRef(null);
 
@@ -49,9 +54,41 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!hasSupabaseConfig) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) {
+        return;
+      }
+      setAuthSession(data.session);
+      setApiAccessToken(data.session?.access_token ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthSession(session);
+      setApiAccessToken(session?.access_token ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
   const selectedSubject = useMemo(
     () => subjects.find((item) => item.id === selectedSubjectId) ?? null,
     [subjects, selectedSubjectId]
+  );
+  const activeSessionStorageKey = useMemo(
+    () => authSession?.user?.id ? `${STORAGE_KEY}:${authSession.user.id}` : STORAGE_KEY,
+    [authSession]
   );
 
   const showNotification = (message, type = 'info') => {
@@ -86,18 +123,39 @@ function App() {
   };
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!authSession) {
+      setSubjects([]);
+      setSelectedSubjectId(null);
+      setSummary({ today_seconds: 0, week_seconds: 0 });
+      setSessions([]);
+      setSubjectStats([]);
+      setDailyTotals([]);
+      setActiveSession(null);
+      setActiveScreen('home');
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
     async function load() {
+      setLoading(true);
       try {
         const [subjectRows, summaryData, sessionRows] = await Promise.all([
           runApi(fetchSubjects, 'Could not load subjects'),
           runApi(fetchSummary, 'Could not load summary'),
           runApi(fetchSessions, 'Could not load sessions')
         ]);
+        if (cancelled) {
+          return;
+        }
         if (subjectRows) {
           setSubjects(subjectRows);
-          if (subjectRows.length && !selectedSubjectId) {
-            setSelectedSubjectId(subjectRows[0].id);
-          }
+          setSelectedSubjectId((current) => current ?? subjectRows[0]?.id ?? null);
         }
         if (summaryData) {
           setSummary(summaryData);
@@ -106,11 +164,15 @@ function App() {
           setSessions(sessionRows);
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
+
     load();
-    const stored = localStorage.getItem(STORAGE_KEY);
+
+    const stored = localStorage.getItem(activeSessionStorageKey);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -125,10 +187,14 @@ function App() {
         });
         setActiveScreen('timer');
       } catch (error) {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(activeSessionStorageKey);
       }
     }
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, authSession, activeSessionStorageKey]);
 
   useEffect(() => {
     if (subjects.length && !selectedSubjectId) {
@@ -227,11 +293,18 @@ function App() {
 
   useEffect(() => {
     if (activeSession) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(activeSession));
+      localStorage.setItem(activeSessionStorageKey, JSON.stringify(activeSession));
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(activeSessionStorageKey);
     }
-  }, [activeSession]);
+  }, [activeSession, activeSessionStorageKey]);
+
+  async function handleSignOut() {
+    if (!supabase) {
+      return;
+    }
+    await supabase.auth.signOut();
+  }
 
   async function handleDeleteSubject(id) {
     if (!window.confirm('Delete this subject and all related sessions?')) {
@@ -403,6 +476,21 @@ function App() {
     }
   }
 
+  if (authLoading) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-panel">
+          <h1>Study Tracker</h1>
+          <p>Loading your account...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authSession) {
+    return <AuthScreen />;
+  }
+
   return (
     <div className="app-shell">
       {notification && (
@@ -425,6 +513,9 @@ function App() {
         <div className="top-actions">
           <button className="icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle Theme">
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          <button className="icon-btn" onClick={handleSignOut} title="Sign out">
+            <LogOut size={20} />
           </button>
         </div>
       </div>

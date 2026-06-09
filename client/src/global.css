@@ -117,6 +117,65 @@ h1, h2, h3, h4, h5, h6 {
   gap: 16px;
 }
 
+/* Auth */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--glass-shadow);
+}
+
+.auth-panel h1 {
+  font-size: 2rem;
+}
+
+.auth-panel p {
+  color: var(--text-muted);
+}
+
+.auth-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.auth-panel input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-main);
+}
+
+.auth-message {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.link-button {
+  align-self: center;
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* Topbar */
 .topbar {
   display: flex;

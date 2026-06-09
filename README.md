@@ -83,25 +83,31 @@ npm start
 
 ### Environment configuration
 
-The frontend uses `VITE_API_BASE` at build time to call the API.
+The app uses Supabase Auth and PostgreSQL for public, per-user data.
 
-- For same-origin deployments (recommended), leave `VITE_API_BASE` empty.
-- For separate backend hosting, set it to your API URL.
+Required server environment variables:
 
-Example:
+- `DATABASE_URL` - Supabase PostgreSQL connection string
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_ANON_KEY` - Supabase anon/public key
 
-```env
-VITE_API_BASE=https://your-app.example.com
-```
+Required frontend build-time environment variables:
+
+- `VITE_SUPABASE_URL` - same Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - same Supabase anon/public key
+- `VITE_API_BASE` - API base URL
+
+For same-origin deployments, leave `VITE_API_BASE` empty. For separate backend hosting, set it to your API URL.
+
+Render must have the Supabase values set before it builds the app because `VITE_` variables are baked into the frontend bundle.
 
 ## Notes
 
 - `client/.env.development` is configured for local dev (`http://localhost:3001`).
-- `client/.env.production` is intentionally left blank so the production frontend calls the same origin by default.
+- `client/.env.production` keeps `VITE_API_BASE` blank so the production frontend calls the same origin by default.
 - The server already supports `process.env.PORT` for hosted environments.
 
 ## Project structure
 
-- `client/` — React + Vite frontend
-- `server/` — Express backend with SQLite
-- `study.db` — SQLite database file created at runtime
+- `client/` - React + Vite frontend
+- `server/` - Express backend with PostgreSQL

@@ -1,22 +1,26 @@
-const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
-  : path.resolve(__dirname, '..', '..', 'study.db');
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-const shouldInit = !fs.existsSync(dbPath);
-const db = new Database(dbPath);
+const connectionString = process.env.DATABASE_URL;
 
-function initialize() {
-  const schema = fs.readFileSync(path.resolve(__dirname, 'schema.sql'), 'utf-8');
-  db.exec(schema);
+if (!connectionString) {
+  throw new Error('DATABASE_URL is required. Set it to your Supabase PostgreSQL connection string.');
 }
 
-db.pragma('foreign_keys = ON');
-initialize();
+const pool = new Pool({
+  connectionString,
+  ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false }
+});
 
-console.log(`SQLite database path: ${dbPath}${shouldInit ? ' (created)' : ''}`);
+async function initialize() {
+  const schema = fs.readFileSync(path.resolve(__dirname, 'schema.sql'), 'utf-8');
+  await pool.query(schema);
+  console.log('PostgreSQL schema initialized');
+}
 
-module.exports = db;
+module.exports = {
+  initialize,
+  query: (text, params) => pool.query(text, params),
+  pool
+};

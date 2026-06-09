@@ -1,8 +1,16 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+let accessToken = null;
+
+export function setApiAccessToken(token) {
+  accessToken = token;
+}
 
 async function request(path, options) {
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    },
     ...options
   });
   if (!response.ok) {
