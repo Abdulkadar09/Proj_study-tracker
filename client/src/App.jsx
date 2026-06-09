@@ -137,6 +137,18 @@ function App() {
   }, [subjects, selectedSubjectId]);
 
   useEffect(() => {
+    if (loading || !activeSession) {
+      return;
+    }
+    const subjectStillExists = subjects.some((subject) => subject.id === activeSession.subjectId);
+    if (!subjectStillExists) {
+      setActiveSession(null);
+      setActiveScreen('home');
+      showNotification('That subject no longer exists. Start a new session.', 'info');
+    }
+  }, [loading, subjects, activeSession]);
+
+  useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       showNotification('Back online.', 'success');
@@ -288,13 +300,20 @@ function App() {
     if (!activeSession) {
       return;
     }
+    const subjectStillExists = subjects.some((subject) => subject.id === activeSession.subjectId);
+    if (!subjectStillExists) {
+      setActiveSession(null);
+      setActiveScreen('home');
+      showNotification('That subject no longer exists. Start a new session.', 'info');
+      return;
+    }
     const endedAt = Date.now();
     const pausedDuration = activeSession.pausedDuration + (activeSession.isPaused ? endedAt - activeSession.pausedAt : 0);
     const elapsed = Math.max(0, endedAt - activeSession.startedAt - pausedDuration);
     const durationSeconds = Math.round(elapsed / 1000);
     const saved = await runApi(
       () => createSession({
-        subject_id: activeSession.subjectId,
+        subject_id: Number(activeSession.subjectId),
         started_at: activeSession.startedAt,
         ended_at: endedAt,
         duration_seconds: durationSeconds

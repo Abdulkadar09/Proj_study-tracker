@@ -2,7 +2,10 @@ const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const dbPath = path.resolve(__dirname, '..', '..', 'study.db');
+const dbPath = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.resolve(__dirname, '..', '..', 'study.db');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const shouldInit = !fs.existsSync(dbPath);
 const db = new Database(dbPath);
 
@@ -11,8 +14,9 @@ function initialize() {
   db.exec(schema);
 }
 
-if (shouldInit) {
-  initialize();
-}
+db.pragma('foreign_keys = ON');
+initialize();
+
+console.log(`SQLite database path: ${dbPath}${shouldInit ? ' (created)' : ''}`);
 
 module.exports = db;

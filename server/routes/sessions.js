@@ -20,15 +20,52 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const { subject_id, started_at, ended_at, duration_seconds } = req.body;
-  if (!subject_id || !started_at || !ended_at || duration_seconds == null) {
-    return res.status(400).json({ error: 'Missing session fields' });
+  const payload = {
+    subject_id: Number(subject_id),
+    started_at: Number(started_at),
+    ended_at: Number(ended_at),
+    duration_seconds: Number(duration_seconds)
+  };
+
+  if (
+    !Number.isInteger(payload.subject_id) ||
+    payload.subject_id <= 0 ||
+    !Number.isFinite(payload.started_at) ||
+    !Number.isFinite(payload.ended_at) ||
+    !Number.isFinite(payload.duration_seconds) ||
+    payload.duration_seconds < 0
+  ) {
+    console.warn('Invalid session payload', req.body);
+    return res.status(400).json({ error: 'Invalid session fields' });
   }
-  const stmt = db.prepare(
-    'INSERT INTO sessions (subject_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?)'
-  );
-  const info = stmt.run(subject_id, started_at, ended_at, duration_seconds);
-  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json(session);
+
+  const subject = db.prepare('SELECT id, name FROM subjects WHERE id = ?').get(payload.subject_id);
+  if (!subject) {
+    const subjectsSummary = db.prepare('SELECT COUNT(*) AS count, GROUP_CONCAT(id) AS ids FROM subjects').get();
+    console.warn('Session rejected because subject_id was not found', {
+      requested_subject_id: payload.subject_id,
+      subjects_count: subjectsSummary.count,
+      subject_ids: subjectsSummary.ids
+    });
+    return res.status(404).json({ error: 'Subject not found for session' });
+  }
+
+  try {
+    const stmt = db.prepare(
+      'INSERT INTO sessions (subject_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?)'
+    );
+    const info = stmt.run(
+      payload.subject_id,
+      payload.started_at,
+      payload.ended_at,
+      payload.duration_seconds
+    );
+    const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(info.lastInsertRowid);
+    res.status(201).json(session);
+  } catch (error) {
+    console.error('Failed to create session', { payload, error });
+    res.status(500).json({ error: 'Could not create session' });
+  }
 });
 
 router.patch('/:id', (req, res) => {
