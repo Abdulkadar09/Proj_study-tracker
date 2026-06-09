@@ -13,9 +13,6 @@ export default function HomeScreen({
   const weekLabel = getWeekLabel();
   return (
     <div className="home-screen">
-      <div className="topbar">
-        <h1 className="title">Study Tracker</h1>
-      </div>
 
       <div className="home-screen-content">
         <div className="card-row">
@@ -30,20 +27,22 @@ export default function HomeScreen({
         </div>
       </div>
 
-      <p className="section-title">Select subject</p>
-      <div className="chip-list">
-        {subjects.length ? (
-          subjects.map((subject) => (
-            <SubjectChip
-              key={subject.id}
-              subject={subject}
-              selected={subject.id === selectedSubjectId}
-              onSelect={onSelectSubject}
-            />
-          ))
-        ) : (
-          <p className="cards-none">No subjects yet. Add one on the Subjects tab.</p>
-        )}
+      <div className="selection-area">
+        <p className="section-title">Select subject</p>
+        <div className="chip-list">
+          {subjects.length ? (
+            subjects.map((subject) => (
+              <SubjectChip
+                key={subject.id}
+                subject={subject}
+                selected={subject.id === selectedSubjectId}
+                onSelect={onSelectSubject}
+              />
+            ))
+          ) : (
+            <p className="cards-none">No subjects yet. Add one on the Subjects tab.</p>
+          )}
+        </div>
       </div>
 
       <button

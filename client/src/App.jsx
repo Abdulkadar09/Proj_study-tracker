@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Home, History, BarChart2, BookOpen, Sun, Moon } from 'lucide-react';
 import {
   fetchSubjects,
   createSubject,
@@ -20,10 +21,10 @@ import SubjectsScreen from './screens/SubjectsScreen';
 
 const STORAGE_KEY = 'study-tracker-active-session';
 const NAV_ITEMS = [
-  { id: 'home', label: 'Home' },
-  { id: 'history', label: 'History' },
-  { id: 'stats', label: 'Stats' },
-  { id: 'subjects', label: 'Subjects' }
+  { id: 'home', label: 'Home', icon: Home },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'stats', label: 'Stats', icon: BarChart2 },
+  { id: 'subjects', label: 'Subjects', icon: BookOpen }
 ];
 
 function App() {
@@ -39,8 +40,14 @@ function App() {
   const [notification, setNotification] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
   const notificationTimeoutRef = useRef(null);
   const swRegistrationRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   const selectedSubject = useMemo(
     () => subjects.find((item) => item.id === selectedSubjectId) ?? null,
@@ -394,6 +401,14 @@ function App() {
           You are offline. Some features may be unavailable.
         </div>
       )}
+      <div className="topbar">
+        <h1 className="title">Study Tracker</h1>
+        <div className="top-actions">
+          <button className="icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle Theme">
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
+      </div>
       {renderScreen()}
       {activeScreen !== 'timer' && (
         <div className="bottom-nav">
@@ -405,7 +420,8 @@ function App() {
                 className={`nav-item ${activeScreen === item.id ? 'active' : ''}`}
                 onClick={() => setActiveScreen(item.id)}
               >
-                {item.label}
+                <item.icon size={22} />
+                <span>{item.label}</span>
               </button>
             ))}
           </div>
